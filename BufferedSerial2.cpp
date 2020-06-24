@@ -1,5 +1,5 @@
 /**
- * @file    BufferedSerial.cpp
+ * @file    BufferedSerial2.cpp
  * @brief   Software Buffer - Extends mbed Serial functionallity adding irq driven TX and RX
  * @author  sam grove
  * @version 1.0
@@ -20,19 +20,19 @@
  * limitations under the License.
  */
 
-#include "BufferedSerial.h"
-#include <stdarg.h>
+#include "BufferedSerial2.h"
+#include "Serial.h"
 
-BufferedSerial::BufferedSerial(PinName tx, PinName rx, uint32_t buf_size, uint32_t tx_multiple, const char* name)
-    : RawSerial(tx, rx) , _rxbuf(buf_size), _txbuf((uint32_t)(tx_multiple*buf_size))
+using namespace mbed;
+
+BufferedSerial2::BufferedSerial2(PinName tx, PinName rx, int baud, bool block_on_full)
+    : RawSerial(tx, rx, baud), m_block_on_full(block_on_full)
 {
-    RawSerial::attach(callback(this, &BufferedSerial::rxIrq), Serial::RxIrq);
-    this->_buf_size = buf_size;
-    this->_tx_multiple = tx_multiple;   
+    RawSerial::attach(callback(this, &BufferedSerial2::rxIrq), Serial::RxIrq);
     return;
 }
 
-BufferedSerial::~BufferedSerial(void)
+BufferedSerial2::~BufferedSerial2(void)
 {
     RawSerial::attach(NULL, RawSerial::RxIrq);
     RawSerial::attach(NULL, RawSerial::TxIrq);
@@ -40,76 +40,60 @@ BufferedSerial::~BufferedSerial(void)
     return;
 }
 
-int BufferedSerial::readable(void)
+int BufferedSerial2::readable(void)
 {
-    return _rxbuf.available();  // note: look if things are in the buffer
+    return _rxbuf.empty() ? 0 : 1;  // note: look if things are in the buffer
 }
 
-int BufferedSerial::writeable(void)
+int BufferedSerial2::writeable(void)
 {
     return 1;   // buffer allows overwriting by design, always true
 }
 
-int BufferedSerial::getc(void)
+int BufferedSerial2::getc(void)
 {
-    return _rxbuf;
+    char c = 0;
+    _rxbuf.pop(c);
+    return c;
 }
 
-int BufferedSerial::putc(int c)
+int BufferedSerial2::putc(int c)
 {
-    _txbuf = (char)c;
-    BufferedSerial::prime();
+    while (m_block_on_full && _txbuf.full());
+    _txbuf.push((char)c);
+    BufferedSerial2::prime();
 
     return c;
 }
 
-int BufferedSerial::puts(const char *s)
+int BufferedSerial2::puts(const char *s)
 {
     if (s != NULL) {
         const char* ptr = s;
     
         while(*(ptr) != 0) {
-            _txbuf = *(ptr++);
+            while (m_block_on_full && _txbuf.full());
+            _txbuf.push(*(ptr++));
         }
-        _txbuf = '\n';  // done per puts definition
-        BufferedSerial::prime();
+        _txbuf.push('\n');  // done per puts definition
+        BufferedSerial2::prime();
     
         return (ptr - s) + 1;
     }
     return 0;
 }
 
-int BufferedSerial::printf(const char* format, ...)
-{
-    char buffer[this->_buf_size];
-    memset(buffer,0,this->_buf_size);
-    int r = 0;
-
-    va_list arg;
-    va_start(arg, format);
-    r = vsprintf(buffer, format, arg);
-    // this may not hit the heap but should alert the user anyways
-    if(r > this->_buf_size) {
-        error("%s %d buffer overwrite (max_buf_size: %d exceeded: %d)!\r\n", __FILE__, __LINE__,this->_buf_size,r);
-        va_end(arg);
-        return 0;
-    }
-    va_end(arg);
-    r = BufferedSerial::write(buffer, r);
-
-    return r;
-}
-
-ssize_t BufferedSerial::write(const void *s, size_t length)
+ssize_t BufferedSerial2::write(const void *s, size_t length)
 {
     if (s != NULL && length > 0) {
         const char* ptr = (const char*)s;
         const char* end = ptr + length;
     
         while (ptr != end) {
-            _txbuf = *(ptr++);
+            while (m_block_on_full && _txbuf.full());
+            _txbuf.push(*(ptr++));
         }
-        BufferedSerial::prime();
+        BufferedSerial2::prime();
     
         return ptr - (const char*)s;
     }
@@ -117,22 +101,24 @@ ssize_t BufferedSerial::write(const void *s, size_t length)
 }
 
 
-void BufferedSerial::rxIrq(void)
+void BufferedSerial2::rxIrq(void)
 {
     // read from the peripheral and make sure something is available
     if(serial_readable(&_serial)) {
-        _rxbuf = serial_getc(&_serial); // if so load them into a buffer
+        _rxbuf.push(serial_getc(&_serial)); // if so load them into a buffer
     }
 
     return;
 }
 
-void BufferedSerial::txIrq(void)
+void BufferedSerial2::txIrq(void)
 {
     // see if there is room in the hardware fifo and if something is in the software fifo
     while(serial_writable(&_serial)) {
-        if(_txbuf.available()) {
-            serial_putc(&_serial, (int)_txbuf.get());
+        if(!_txbuf.empty()) {
+            char c = 0;
+            _txbuf.pop(c);
+            serial_putc(&_serial, (int)c);
         } else {
             // disable the TX interrupt when there is nothing left to send
             RawSerial::attach(NULL, RawSerial::TxIrq);
@@ -143,13 +129,13 @@ void BufferedSerial::txIrq(void)
     return;
 }
 
-void BufferedSerial::prime(void)
+void BufferedSerial2::prime(void)
 {
     // if already busy then the irq will pick this up
     if(serial_writable(&_serial)) {
         RawSerial::attach(NULL, RawSerial::TxIrq);    // make sure not to cause contention in the irq
-        BufferedSerial::txIrq();                // only write to hardware in one place
-        RawSerial::attach(callback(this, &BufferedSerial::txIrq), RawSerial::TxIrq);
+        BufferedSerial2::txIrq();                // only write to hardware in one place
+        RawSerial::attach(callback(this, &BufferedSerial2::txIrq), RawSerial::TxIrq);
     }
 
     return;

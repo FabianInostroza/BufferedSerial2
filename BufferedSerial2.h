@@ -1,6 +1,6 @@
 
 /**
- * @file    BufferedSerial.h
+ * @file    BufferedSerial2.h
  * @brief   Software Buffer - Extends mbed Serial functionallity adding irq driven TX and RX
  * @author  sam grove
  * @version 1.0
@@ -21,16 +21,27 @@
  * limitations under the License.
  */
 
-#ifndef BUFFEREDSERIAL_H
-#define BUFFEREDSERIAL_H
- 
-#include "mbed.h"
-#include "MyBuffer.h"
+#ifndef BUFFEREDSERIAL2_H
+#define BUFFEREDSERIAL2_H
+
+#include "mbed_version.h"
+#include "RawSerial.h"
+#include "Stream.h"
+#include "NonCopyable.h"
+#include "CircularBuffer.h"
+
+#if !defined(BUFFEREDSERIAL2_TX_SIZE)
+#define BUFFEREDSERIAL2_TX_SIZE 0x200
+#endif
+
+#if !defined(BUFFEREDSERIAL2_RX_SIZE)
+#define BUFFEREDSERIAL2_RX_SIZE 0x100
+#endif
 
 #if (MBED_MAJOR_VERSION == 5) && (MBED_MINOR_VERSION >= 2)
 #elif (MBED_MAJOR_VERSION == 2) && (MBED_PATCH_VERSION > 130)
 #else
-#error "BufferedSerial version 13 and newer requires use of Mbed OS 5.2.0 and newer or Mbed 2 version 130 and newer. Use BufferedSerial version 12 and older or upgrade the Mbed version.
+#error "BufferedSerial version 13 and newer requires use of Mbed OS 5.2.0 and newer or Mbed 2 version 130 and newer. Use BufferedSerial version 12 and older or upgrade the Mbed version."
 #endif
 
 /** A serial port (UART) for communication with other serial devices
@@ -73,14 +84,13 @@
 /**
  *  @class BufferedSerial
  *  @brief Software buffers and interrupt driven tx and rx for Serial
- */  
-class BufferedSerial : public RawSerial 
+ */
+class BufferedSerial2 : public mbed::RawSerial, public mbed::Stream, private mbed::NonCopyable<BufferedSerial2>
 {
 private:
-    MyBuffer <char> _rxbuf;
-    MyBuffer <char> _txbuf;
-    uint32_t      _buf_size;
-    uint32_t      _tx_multiple;
+    mbed::CircularBuffer<char, BUFFEREDSERIAL2_RX_SIZE> _rxbuf;
+    mbed::CircularBuffer<char, BUFFEREDSERIAL2_TX_SIZE> _txbuf;
+    bool m_block_on_full;
  
     void rxIrq(void);
     void txIrq(void);
@@ -95,11 +105,11 @@ public:
      *  @param name optional name
      *  @note Either tx or rx may be specified as NC if unused
      */
-    BufferedSerial(PinName tx, PinName rx, uint32_t buf_size = 256, uint32_t tx_multiple = 4,const char* name=NULL);
+    BufferedSerial2(PinName tx, PinName rx, int baud = MBED_CONF_PLATFORM_DEFAULT_SERIAL_BAUD_RATE, bool block_on_full=true);
     
     /** Destroy a BufferedSerial port
      */
-    virtual ~BufferedSerial(void);
+    virtual ~BufferedSerial2(void);
     
     /** Check on how many bytes are in the rx buffer
      *  @return 1 if something exists, 0 otherwise
@@ -133,7 +143,8 @@ public:
      *  @param format The string + format specifiers to write to the Serial Port
      *  @return The number of bytes written to the Serial Port Buffer
      */
-    virtual int printf(const char* format, ...);
+    using Stream::printf;
+    using Stream::vprintf;
     
     /** Write data to the Buffered Serial Port
      *  @param s A pointer to data to send
@@ -141,6 +152,10 @@ public:
      *  @return The number of bytes written to the Serial Port Buffer
      */
     virtual ssize_t write(const void *s, std::size_t length);
+
+
+    virtual int _putc(int c) {return putc(c);}
+    virtual int _getc() {return 0;}
 };
 
 #endif
