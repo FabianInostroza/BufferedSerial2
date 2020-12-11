@@ -28,7 +28,7 @@
 #include "RawSerial.h"
 #include "Stream.h"
 #include "NonCopyable.h"
-#include "CircularBuffer.h"
+#include "CircularBuffer2.h"
 
 #if !defined(BUFFEREDSERIAL2_TX_SIZE)
 #define BUFFEREDSERIAL2_TX_SIZE 0x200
@@ -88,8 +88,8 @@
 class BufferedSerial2 : public mbed::RawSerial, public mbed::Stream, private mbed::NonCopyable<BufferedSerial2>
 {
 private:
-    mbed::CircularBuffer<char, BUFFEREDSERIAL2_RX_SIZE> _rxbuf;
-    mbed::CircularBuffer<char, BUFFEREDSERIAL2_TX_SIZE> _txbuf;
+    mbed::CircularBuffer2<char> _rxbuf;
+    mbed::CircularBuffer2<char> _txbuf;
     bool m_block_on_full;
  
     void rxIrq(void);
@@ -105,7 +105,7 @@ public:
      *  @param name optional name
      *  @note Either tx or rx may be specified as NC if unused
      */
-    BufferedSerial2(PinName tx, PinName rx, int baud = MBED_CONF_PLATFORM_DEFAULT_SERIAL_BAUD_RATE, bool block_on_full=true);
+    BufferedSerial2(PinName tx, PinName rx, char *rx_buf, size_t rx_buf_size, char *tx_buf, size_t tx_buf_size, int baud = MBED_CONF_PLATFORM_DEFAULT_SERIAL_BAUD_RATE, bool block_on_full=true);
     
     /** Destroy a BufferedSerial port
      */

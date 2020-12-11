@@ -25,8 +25,8 @@
 
 using namespace mbed;
 
-BufferedSerial2::BufferedSerial2(PinName tx, PinName rx, int baud, bool block_on_full)
-    : RawSerial(tx, rx, baud), m_block_on_full(block_on_full)
+BufferedSerial2::BufferedSerial2(PinName tx, PinName rx, char *rx_buf, size_t rx_buf_size, char *tx_buf, size_t tx_buf_size, int baud, bool block_on_full)
+    : _rxbuf(rx_buf, rx_buf_size), _txbuf(tx_buf, tx_buf_size), RawSerial(tx, rx, baud), m_block_on_full(block_on_full)
 {
     RawSerial::attach(callback(this, &BufferedSerial2::rxIrq), Serial::RxIrq);
     return;
