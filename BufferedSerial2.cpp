@@ -40,9 +40,9 @@ BufferedSerial2::~BufferedSerial2(void)
     return;
 }
 
-int BufferedSerial2::readable(void)
+bool BufferedSerial2::readable() const
 {
-    return _rxbuf.empty() ? 0 : 1;  // note: look if things are in the buffer
+    return _rxbuf.empty() ? false : true;  // note: look if things are in the buffer
 }
 
 int BufferedSerial2::writeable(void)

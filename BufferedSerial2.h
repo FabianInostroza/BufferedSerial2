@@ -114,7 +114,7 @@ public:
     /** Check on how many bytes are in the rx buffer
      *  @return 1 if something exists, 0 otherwise
      */
-    virtual int readable(void);
+    bool readable() const;
     
     /** Check to see if the tx buffer has room
      *  @return 1 always has room and can overwrite previous content if too small / slow
