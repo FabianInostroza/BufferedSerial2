@@ -153,9 +153,18 @@ public:
      */
     virtual ssize_t write(const void *s, std::size_t length);
 
+    virtual int sync() {while(!_txbuf.empty()); return 0;}
 
     virtual int _putc(int c) {return putc(c);}
-    virtual int _getc() {return 0;}
+    virtual int _getc() {
+        char c = 0;
+        _rxbuf.pop(c);
+        return c;
+    }
+
+    virtual short poll(short events) const {
+        return _rxbuf.empty() ? 0 : POLLIN;
+    }
 };
 
 #endif
